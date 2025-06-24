@@ -107,40 +107,25 @@ const ScormProvider: React.FC<ScormProviderProps> = ({
 	 */
 	const commitData = useCallback((): boolean => {
 		if (!apiConnected) {
-			throw new Error("SCORM API não conectada");
+			console.error("SCORM API não conectada no commit.");
+			return false;
 		}
-
 		try {
-			// 1. Garantir que dados críticos estejam definidos
-			const exitMode = SCORM.get("cmi.core.exit");
-			if (!exitMode || exitMode !== "suspend") {
-				SCORM.set("cmi.core.exit", "suspend");
-			}
-
-			// 2. Tentar commit usando diferentes métodos
 			let success = false;
-
-			// Método 1: Função direta do provedor
 			if (typeof SCORM.save === "function") {
 				success = SCORM.save() !== "false";
 			}
-
-			// Método 2: LMSCommit direto (mais confiável em alguns LMS)
 			if (!success && SCORM.version === "1.2") {
 				try {
-					// @ts-ignore - Acesso direto à API SCORM
+					// @ts-ignore
 					success = SCORM.API.LMSCommit("") !== "false";
 				} catch (e) {
 					console.warn("Erro ao tentar LMSCommit direto:", e);
 				}
 			}
-
-			// 3. Verificar se o commit funcionou
-			const suspendData = SCORM.get("cmi.suspend_data");
-			if (!suspendData || suspendData === "{}") {
-				console.warn("Commit não persistiu dados em suspend_data");
+			if (!success) {
+				console.error("Commit SCORM falhou.");
 			}
-
 			return success;
 		} catch (error) {
 			console.error("Erro no commit:", error);
