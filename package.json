@@ -1,6 +1,6 @@
 {
   "name": "@erik-efl/react-scorm-provider",
-  "version": "1.2.12",
+  "version": "1.2.13",
   "description": "Modern React Components to easily enable SCORM API communication in React projects. Updated fork of the original react-scorm-provider.",
   "main": "lib/index.js",
   "module": "lib/index.mjs",
