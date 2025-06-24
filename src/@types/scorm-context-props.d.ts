@@ -45,7 +45,7 @@ export interface IScormContextProps {
    * @description Function to get the suspend data from the SCORM API
    * @example
    * const suspendData = await getSuspendData();
-   * @returns {Promise<void>}
+   * @returns {void}
   */
   getSuspendData: () => boolean;
   /**
@@ -75,9 +75,9 @@ export interface IScormContextProps {
    * @param {Score} score - The score to set
    * @example
    * setScore({ value: 100, min: 0, max: 100, status: "passed" });
-   * @returns {Promise<any>}
+   * @returns {any}
   */
-  setScore: (score: Score) => Promise<any>;
+  setScore: (score: Score) => any;
   /**
    * @description Function to set a value in the SCORM API
    * @param {string} key - The key to set
@@ -99,7 +99,7 @@ export interface IScormContextProps {
    * @description Saves all current student progress to the LMS without ending the session (LMSCommit)
    * @example
    * commitData();
-   * @returns {Promise<any>}
+   * @returns {any}
    * @throws {Error} If the SCORM API is not connected
   */
   commitData: () => boolean;
