@@ -79,7 +79,7 @@ const ScormProvider: React.FC<ScormProviderProps> = ({ children, version, debug:
   * @description Saves all current student progress to the LMS without ending the session (LMSCommit)
   * @example
   * commitData();
-  * @returns {boolean} A promise that resolves with the result of the save operation
+  * @returns {boolean} Returns true if the commit was successful, false otherwise
   * @throws {Error} If the SCORM API is not connected
   */
   const commitData = useCallback((): boolean => {
@@ -213,9 +213,9 @@ const ScormProvider: React.FC<ScormProviderProps> = ({ children, version, debug:
     SCORM.status("set", status);
   }, [apiConnected]);
 
-  const setScore = useCallback(async (score: Score): Promise<any> => {
+  const setScore = useCallback((score: Score): any => {
     if (!apiConnected) {
-      return Promise.reject(new Error("SCORM API not connected"));
+      return new Error("SCORM API not connected");
     }
 
     try {
@@ -235,13 +235,9 @@ const ScormProvider: React.FC<ScormProviderProps> = ({ children, version, debug:
 
       const saveResult = SCORM.save();
 
-      return Promise.resolve({
-        success: true,
-        saveResult,
-        score
-      });
+      return saveResult;
     } catch (error) {
-      return Promise.reject(error);
+      return error instanceof Error;
     }
   }, [apiConnected, scormVersion, setStatus]);
 
