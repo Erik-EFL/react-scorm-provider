@@ -1,285 +1,327 @@
-import React, { createContext, useEffect, useState, useCallback, ReactNode } from "react";
-import { SCORM, debug } from "pipwerks-scorm-api-wrapper";
-import { Score } from ".";
 import { IScormContextProps } from "@/@types/scorm-context-props";
+import { SCORM, debug } from "pipwerks-scorm-api-wrapper";
+import React, {
+	ReactNode,
+	createContext,
+	useCallback,
+	useEffect,
+	useState,
+} from "react";
+import { Score } from ".";
 
-export const ScoContext = createContext<IScormContextProps | undefined>(undefined);
+export const ScoContext = createContext<IScormContextProps | undefined>(
+	undefined
+);
 
 interface ScormProviderProps {
-  children: ReactNode;
-  version?: "1.2" | "2004";
-  debug?: boolean;
+	children: ReactNode;
+	version?: "1.2" | "2004";
+	debug?: boolean;
 }
 
 const formatSessionTime = (milliseconds: number): string => {
-  const totalSeconds = Math.floor(milliseconds / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
+	const totalSeconds = Math.floor(milliseconds / 1000);
+	const hours = Math.floor(totalSeconds / 3600);
+	const minutes = Math.floor((totalSeconds % 3600) / 60);
+	const seconds = totalSeconds % 60;
 
-  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.00`;
+	return `${hours.toString().padStart(2, "0")}:${minutes
+		.toString()
+		.padStart(2, "0")}:${seconds.toString().padStart(2, "0")}.00`;
 };
 
-const ScormProvider: React.FC<ScormProviderProps> = ({ children, version, debug: isDebug }) => {
-  const [apiConnected, setApiConnected] = useState(false);
-  const [learnerName, setLearnerName] = useState("unknown");
-  const [completionStatus, setCompletionStatus] = useState("unknown");
-  const [suspendData, setSuspendDataState] = useState<Record<string, any>>({});
-  const [scormVersion, setScormVersion] = useState<string>("");
+const ScormProvider: React.FC<ScormProviderProps> = ({
+	children,
+	version,
+	debug: isDebug,
+}) => {
+	const [apiConnected, setApiConnected] = useState(false);
+	const [learnerName, setLearnerName] = useState("unknown");
+	const [completionStatus, setCompletionStatus] = useState("unknown");
+	const [suspendData, setSuspendDataState] = useState<Record<string, any>>({});
+	const [scormVersion, setScormVersion] = useState<string>("");
 
-  useEffect(() => {
-    createScormAPIConnection();
-    window.addEventListener("beforeunload", closeScormAPIConnection);
-    return () => {
-      closeScormAPIConnection();
-      window.removeEventListener("beforeunload", closeScormAPIConnection);
-    };
-  }, []);
+	useEffect(() => {
+		createScormAPIConnection();
+		window.addEventListener("beforeunload", closeScormAPIConnection);
+		return () => {
+			closeScormAPIConnection();
+			window.removeEventListener("beforeunload", closeScormAPIConnection);
+		};
+	}, []);
 
-  const createScormAPIConnection = useCallback(() => {
-    if (apiConnected) return;
+	const createScormAPIConnection = useCallback(() => {
+		if (apiConnected) return;
 
-    if (version) SCORM.version = version;
-    if (typeof isDebug === "boolean") debug.isActive = isDebug;
+		if (version) SCORM.version = version;
+		if (typeof isDebug === "boolean") debug.isActive = isDebug;
 
-    if (SCORM.init()) {
-      const version = SCORM.version;
-      const learner = version === "1.2" ? SCORM.get("cmi.core.student_name") : SCORM.get("cmi.learner_name");
-      const status = SCORM.status("get");
+		const connected = SCORM.init();
+		setApiConnected(!!connected);
 
-      setApiConnected(true);
-      setLearnerName(learner || "unknown");
-      setCompletionStatus(status || "unknown");
-      setScormVersion(version);
-      getSuspendData();
-    } else {
-      console.error("ScormProvider init error: could not create the SCORM API connection");
-    }
-  }, [apiConnected, version, isDebug]);
+		if (connected) {
+			const version = SCORM.version;
+			const learner =
+				version === "1.2"
+					? SCORM.get("cmi.core.student_name")
+					: SCORM.get("cmi.learner_name");
+			const status = SCORM.status("get");
 
-  const closeScormAPIConnection = useCallback(() => {
-    if (!apiConnected) return;
+			setApiConnected(true);
+			setLearnerName(learner || "unknown");
+			setCompletionStatus(status || "unknown");
+			setScormVersion(version);
+			getSuspendData();
+		} else {
+			setApiConnected(false);
+			console.error(
+				"ScormProvider init error: could not create the SCORM API connection"
+			);
+		}
+	}, [apiConnected, version, isDebug]);
 
-    setSuspendData();
-    SCORM.status("set", completionStatus);
-    SCORM.save();
+	const closeScormAPIConnection = useCallback(() => {
+		if (!apiConnected) return;
 
-    if (SCORM.quit()) {
-      setApiConnected(false);
-      setLearnerName("unknown");
-      setCompletionStatus("unknown");
-      setSuspendDataState({});
-      setScormVersion("");
-    } else {
-      console.error("ScormProvider error: could not close the API connection");
-    }
-  }, [apiConnected, completionStatus]);
+		setSuspendData();
+		SCORM.status("set", completionStatus);
+		SCORM.save();
 
-  /**
-  * @description Saves all current student progress to the LMS without ending the session (LMSCommit)
-  * @example
-  * commitData();
-  * @returns {boolean} Returns true if the commit was successful, false otherwise
-  * @throws {Error} If the SCORM API is not connected
-  */
-  const commitData = useCallback((): boolean => {
-    if (!apiConnected) {
-      throw new Error("SCORM API não conectada");
-    }
+		if (SCORM.quit()) {
+			setApiConnected(false);
+			setLearnerName("unknown");
+			setCompletionStatus("unknown");
+			setSuspendDataState({});
+			setScormVersion("");
+		} else {
+			console.error("ScormProvider error: could not close the API connection");
+		}
+	}, [apiConnected, completionStatus]);
 
-    try {
-      // 1. Garantir que dados críticos estejam definidos
-      const exitMode = SCORM.get("cmi.core.exit");
-      if (!exitMode || exitMode !== "suspend") {
-        SCORM.set("cmi.core.exit", "suspend");
-      }
+	/**
+	 * @description Saves all current student progress to the LMS without ending the session (LMSCommit)
+	 * @example
+	 * commitData();
+	 * @returns {boolean} Returns true if the commit was successful, false otherwise
+	 * @throws {Error} If the SCORM API is not connected
+	 */
+	const commitData = useCallback((): boolean => {
+		if (!apiConnected) {
+			throw new Error("SCORM API não conectada");
+		}
 
-      // 2. Tentar commit usando diferentes métodos
-      let success = false;
+		try {
+			// 1. Garantir que dados críticos estejam definidos
+			const exitMode = SCORM.get("cmi.core.exit");
+			if (!exitMode || exitMode !== "suspend") {
+				SCORM.set("cmi.core.exit", "suspend");
+			}
 
-      // Método 1: Função direta do provedor
-      if (typeof SCORM.save === "function") {
-        success = SCORM.save() !== "false";
-      }
+			// 2. Tentar commit usando diferentes métodos
+			let success = false;
 
-      // Método 2: LMSCommit direto (mais confiável em alguns LMS)
-      if (!success && SCORM.version === "1.2") {
-        try {
-          // @ts-ignore - Acesso direto à API SCORM
-          success = SCORM.API.LMSCommit("") !== "false";
-        } catch (e) {
-          console.warn("Erro ao tentar LMSCommit direto:", e);
-        }
-      }
+			// Método 1: Função direta do provedor
+			if (typeof SCORM.save === "function") {
+				success = SCORM.save() !== "false";
+			}
 
-      // 3. Verificar se o commit funcionou
-      const suspendData = SCORM.get("cmi.suspend_data");
-      if (!suspendData || suspendData === "{}") {
-        console.warn("Commit não persistiu dados em suspend_data");
-      }
+			// Método 2: LMSCommit direto (mais confiável em alguns LMS)
+			if (!success && SCORM.version === "1.2") {
+				try {
+					// @ts-ignore - Acesso direto à API SCORM
+					success = SCORM.API.LMSCommit("") !== "false";
+				} catch (e) {
+					console.warn("Erro ao tentar LMSCommit direto:", e);
+				}
+			}
 
-      return success;
-    } catch (error) {
-      console.error("Erro no commit:", error);
-      return false;
-    }
-  }, [apiConnected]);
+			// 3. Verificar se o commit funcionou
+			const suspendData = SCORM.get("cmi.suspend_data");
+			if (!suspendData || suspendData === "{}") {
+				console.warn("Commit não persistiu dados em suspend_data");
+			}
 
-  const getSuspendData = useCallback(() => {
-    if (!apiConnected) {
-      throw new Error("SCORM API não conectada");
-    }
+			return success;
+		} catch (error) {
+			console.error("Erro no commit:", error);
+			return false;
+		}
+	}, [apiConnected]);
 
-    try {
-      const data = SCORM.get("cmi.suspend_data");
-      let parsedData = {};
+	const getSuspendData = useCallback(() => {
+		if (!apiConnected) {
+			throw new Error("SCORM API não conectada");
+		}
 
-      if (data && data !== "{}") {
-        try {
-          parsedData = JSON.parse(data);
-          console.log("Dados recuperados de suspend_data com sucesso");
-        } catch (e) {
-          console.warn("Erro ao processar dados de suspend_data:", e);
-        }
-      } else {
-        console.warn("Nenhum dado encontrado em suspend_data");
+		try {
+			const data = SCORM.get("cmi.suspend_data");
+			let parsedData = {};
 
-        const locationData = SCORM.get("cmi.core.lesson_location");
-        if (locationData && locationData.includes("activityId=")) {
-          console.log("Encontrado identificador em lesson_location:", locationData);
-        }
-      }
+			if (data && data !== "{}") {
+				try {
+					parsedData = JSON.parse(data);
+					console.log("Dados recuperados de suspend_data com sucesso");
+				} catch (e) {
+					console.warn("Erro ao processar dados de suspend_data:", e);
+				}
+			} else {
+				console.warn("Nenhum dado encontrado em suspend_data");
 
-      const status = SCORM.get("cmi.core.lesson_status");
-      if (status === "completed" || status === "passed") {
-        console.log("Atividade já marcada como concluída no LMS");
+				const locationData = SCORM.get("cmi.core.lesson_location");
+				if (locationData && locationData.includes("activityId=")) {
+					console.log(
+						"Encontrado identificador em lesson_location:",
+						locationData
+					);
+				}
+			}
 
-        const score = SCORM.get("cmi.core.score.raw");
-        if (score) {
-          console.log("Pontuação recuperada:", score);
-        }
-      }
+			const status = SCORM.get("cmi.core.lesson_status");
+			if (status === "completed" || status === "passed") {
+				console.log("Atividade já marcada como concluída no LMS");
 
-      setSuspendDataState(parsedData);
-      return true;
-    } catch (error) {
-      console.error("Erro ao carregar suspend_data:", error);
-      return false;
-    }
-  }, [apiConnected]);
+				const score = SCORM.get("cmi.core.score.raw");
+				if (score) {
+					console.log("Pontuação recuperada:", score);
+				}
+			}
 
-  const setSuspendData = useCallback(() => {
-    if (!apiConnected) {
-      console.warn("SCORM API não conectada, impossível salvar dados");
-      return false;
-    }
+			setSuspendDataState(parsedData);
+			return true;
+		} catch (error) {
+			console.error("Erro ao carregar suspend_data:", error);
+			return false;
+		}
+	}, [apiConnected]);
 
-    try {
-      SCORM.set("cmi.suspend_data", JSON.stringify(suspendData));
+	const setSuspendData = useCallback(() => {
+		if (!apiConnected) {
+			console.warn("SCORM API não conectada, impossível salvar dados");
+			return false;
+		}
 
-      const locationData = `activityId=${Object.keys(suspendData).join(',')}&ts=${Date.now()}`;
-      SCORM.set("cmi.core.lesson_location", locationData);
+		try {
+			SCORM.set("cmi.suspend_data", JSON.stringify(suspendData));
 
-      SCORM.set("cmi.core.exit", "suspend");
+			const locationData = `activityId=${Object.keys(suspendData).join(
+				","
+			)}&ts=${Date.now()}`;
+			SCORM.set("cmi.core.lesson_location", locationData);
 
-      const sessionTime = formatSessionTime(30 * 60 * 1000);
-      SCORM.set("cmi.core.session_time", sessionTime);
+			SCORM.set("cmi.core.exit", "suspend");
 
-      const status = SCORM.get("cmi.core.lesson_status");
-      if (status !== "completed" && status !== "passed") {
-        SCORM.set("cmi.core.lesson_status", "incomplete");
-      }
+			const sessionTime = formatSessionTime(30 * 60 * 1000);
+			SCORM.set("cmi.core.session_time", sessionTime);
 
-      const commitSuccess = commitData();
+			const status = SCORM.get("cmi.core.lesson_status");
+			if (status !== "completed" && status !== "passed") {
+				SCORM.set("cmi.core.lesson_status", "incomplete");
+			}
 
-      const savedData = SCORM.get("cmi.suspend_data");
-      if (!savedData || savedData === "{}") {
-        console.warn("Dados não foram persistidos corretamente no suspend_data");
-        return false;
-      }
+			const commitSuccess = commitData();
 
-      return commitSuccess;
-    } catch (error) {
-      console.error("Erro ao salvar suspend_data:", error);
-      return false;
-    }
-  }, [apiConnected, suspendData, commitData]);
+			const savedData = SCORM.get("cmi.suspend_data");
+			if (!savedData || savedData === "{}") {
+				console.warn(
+					"Dados não foram persistidos corretamente no suspend_data"
+				);
+				return false;
+			}
 
-  const clearSuspendData = useCallback(() => setSuspendDataState({}), []);
+			return commitSuccess;
+		} catch (error) {
+			console.error("Erro ao salvar suspend_data:", error);
+			return false;
+		}
+	}, [apiConnected, suspendData, commitData]);
 
-  const setStatus = useCallback((status: string) => {
-    if (!apiConnected) return;
-    setCompletionStatus(status);
-    SCORM.status("set", status);
-  }, [apiConnected]);
+	const clearSuspendData = useCallback(() => setSuspendDataState({}), []);
 
-  const setScore = useCallback((score: Score): any => {
-    if (!apiConnected) {
-      return new Error("SCORM API not connected");
-    }
+	const setStatus = useCallback(
+		(status: string) => {
+			if (!apiConnected) return;
+			setCompletionStatus(status);
+			SCORM.status("set", status);
+		},
+		[apiConnected]
+	);
 
-    try {
-      SCORM.set("cmi.score.raw", score.value);
+	const setScore = useCallback(
+		(score: Score): any => {
+			if (!apiConnected) {
+				return new Error("SCORM API not connected");
+			}
 
-      if (scormVersion === "2004") {
-        SCORM.set("cmi.score.min", score.min);
-        SCORM.set("cmi.score.max", score.max);
-      } else if (scormVersion === "1.2") {
-        SCORM.set("cmi.core.score.min", score.min);
-        SCORM.set("cmi.core.score.max", score.max);
-      }
+			try {
+				SCORM.set("cmi.score.raw", score.value);
 
-      if (score.status && score.status !== "0") {
-        setStatus(score.status);
-      }
+				if (scormVersion === "2004") {
+					SCORM.set("cmi.score.min", score.min);
+					SCORM.set("cmi.score.max", score.max);
+				} else if (scormVersion === "1.2") {
+					SCORM.set("cmi.core.score.min", score.min);
+					SCORM.set("cmi.core.score.max", score.max);
+				}
 
-      const saveResult = SCORM.save();
+				if (score.status && score.status !== "0") {
+					setStatus(score.status);
+				}
 
-      return saveResult;
-    } catch (error) {
-      return error instanceof Error;
-    }
-  }, [apiConnected, scormVersion, setStatus]);
+				const saveResult = SCORM.save();
 
-  const set = useCallback((key: string, value: any) => {
-    if (!apiConnected) return;
-    SCORM.set(key, value);
-  }, [apiConnected]);
+				return saveResult;
+			} catch (error) {
+				return error instanceof Error;
+			}
+		},
+		[apiConnected, scormVersion, setStatus]
+	);
 
-  const get = useCallback((key: string) => {
-    if (!apiConnected) return null;
-    return SCORM.get(key);
-  }, [apiConnected]);
+	const set = useCallback(
+		(key: string, value: any) => {
+			if (!apiConnected) return;
+			SCORM.set(key, value);
+		},
+		[apiConnected]
+	);
 
-  return (
-    <ScoContext.Provider
-      value={{
-        apiConnected,
-        learnerName,
-        completionStatus,
-        suspendData,
-        scormVersion,
-        getSuspendData,
+	const get = useCallback(
+		(key: string) => {
+			if (!apiConnected) return null;
+			return SCORM.get(key);
+		},
+		[apiConnected]
+	);
+
+	return (
+		<ScoContext.Provider
+			value={{
+				apiConnected,
+				learnerName,
+				completionStatus,
+				suspendData,
+				scormVersion,
+				getSuspendData,
 				setSuspendData,
-        clearSuspendData,
-        setStatus,
-        setScore,
-        set,
-        get,
-        commitData,
-      }}
-    >
-      {children}
-    </ScoContext.Provider>
-  );
+				clearSuspendData,
+				setStatus,
+				setScore,
+				set,
+				get,
+				commitData,
+			}}
+		>
+			{children}
+		</ScoContext.Provider>
+	);
 };
 
 export const useScorm = (): IScormContextProps => {
-  const context = React.useContext(ScoContext);
-  if (!context) {
-    throw new Error("useScorm must be used within a ScormProvider");
-  }
-  return context;
+	const context = React.useContext(ScoContext);
+	if (!context) {
+		throw new Error("useScorm must be used within a ScormProvider");
+	}
+	return context;
 };
 
 export default ScormProvider;
