@@ -290,4 +290,4 @@ This fork is maintained by [Erik Ferreira de Lima]. The library has been moderni
 
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE.md) for details.
