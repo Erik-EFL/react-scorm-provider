@@ -278,6 +278,12 @@ This package is compatible with:
 
 ## Credits
 
+### Contributors
+
+Many thanks to the contributors of the original [react-scorm-provider](https://github.com/s4netquest/react-scorm-provider) project. This project is tested with BrowserStack.
+
+This project is tested with BrowserStack
+
 ### Original Project
 Originally created and maintained by [S4 NetQuest](https://s4netquest.com).
 
